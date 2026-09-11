@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rubik's Solver - Scramble &amp; Solve</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#101215;--panel:#181b20;--line:#262b33;--ink:#e6ebf0;--dim:#7d8894;--faint:#525c68;--red:#e05348;--green:#4cae60}
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:34px 14px 52px}
+h1{font-size:28px;font-weight:700;margin:0;letter-spacing:-.3px}
+h1 span{color:var(--red)}
+.tag{color:var(--dim);letter-spacing:2px;font-size:11px;margin:8px 0 16px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase}
+.hud{display:flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);margin-bottom:18px}
+.hud .cell{padding:9px 22px;border-right:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:1.6px;color:var(--faint);text-transform:uppercase;display:flex;flex-direction:column;align-items:center;gap:3px}
+.hud .cell:last-child{border-right:none}
+.hud b{color:var(--ink);font-size:16px;letter-spacing:.5px;font-weight:600}
+.hud b.ok{color:var(--green)} .hud b.warn{color:var(--red)}
+.net{display:grid;grid-template-columns:repeat(12,24px);grid-template-rows:repeat(9,24px);gap:3px;margin:4px 0 18px;padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.s{border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.28),inset 2px 3px 0 rgba(255,255,255,.14)}
+.moves{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;max-width:420px;margin-bottom:14px}
+button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;cursor:pointer;transition:border-color .15s,color .15s;display:flex;align-items:center;gap:6px}
+button i{width:9px;height:9px;border-radius:3px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+button:hover{border-color:var(--red);color:var(--red)}
+button:hover i{box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+.big{padding:12px 26px;letter-spacing:1.6px;font-weight:600;text-transform:uppercase;font-size:11px}
+#scrambleBtn{background:var(--red);border-color:var(--red);color:#fff}
+#scrambleBtn:hover{color:#fff;opacity:.88}
+.log{color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px;max-width:420px;text-align:center;line-height:1.8;min-height:20px;margin-top:14px}
+.solved{color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;margin-top:8px;min-height:16px;text-transform:uppercase}
+.legend{display:flex;gap:14px;margin-top:16px;flex-wrap:wrap;justify-content:center}
+.legend span{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:1px;color:var(--faint);display:flex;align-items:center;gap:6px;text-transform:uppercase}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+footer{margin-top:26px;color:var(--faint);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase}
+</style>
+</head>
+<body>
+<h1>Rubik&rsquo;s <span>Solver</span></h1>
+<div class="tag">Scramble it &middot; watch it solve itself</div>
+<div class="hud">
+  <div class="cell">Moves <b id="sM">0</b></div>
+  <div class="cell">State <b id="sS" class="ok">Solved</b></div>
+</div>
+<div class="net" id="net"></div>
+<div class="moves" id="mv"></div>
+<div><button class="big" id="scrambleBtn" onclick="scramble()">Scramble</button> <button class="big" onclick="solve()">Solve</button></div>
+<div class="log" id="log"></div><div class="solved" id="win"></div>
+<div class="legend" id="legend"></div>
+<footer>unfolded net &middot; U top &middot; L F R B middle &middot; D bottom</footer>
+<script>
+const F=['U','R','F','D','L','B'];
+const COL={U:'#f2f2f0',R:'#d8403a',F:'#3fae54',D:'#ffd23e',L:'#ff8c1a',B:'#2b62d9'};
+let cube, hist=[], moves=0, busy=false;
+function reset(){cube={};F.forEach(f=>cube[f]=Array(9).fill(f));hist=[];moves=0;}
+function rot(a){return [a[6],a[3],a[0],a[7],a[4],a[1],a[8],a[5],a[2]];}
+const EDGE={
+ U:[['F',[0,1,2]],['R',[0,1,2]],['B',[0,1,2]],['L',[0,1,2]]],
+ D:[['F',[6,7,8]],['L',[6,7,8]],['B',[6,7,8]],['R',[6,7,8]]],
+ R:[['F',[2,5,8]],['U',[2,5,8]],['B',[6,3,0]],['D',[2,5,8]]],
+ L:[['F',[0,3,6]],['D',[0,3,6]],['B',[8,5,2]],['U',[0,3,6]]],
+ F:[['U',[6,7,8]],['R',[0,3,6]],['D',[2,1,0]],['L',[8,5,2]]],
+ B:[['U',[2,1,0]],['L',[0,3,6]],['D',[6,7,8]],['R',[8,5,2]]]};
+function move(m,quiet){
+ const face=m[0], prime=m.length>1;
+ for(let t=0;t<(prime?3:1);t++){
+  cube[face]=rot(cube[face]);
+  const s=EDGE[face], tmp=s[3][1].map(i=>cube[s[3][0]][i]);
+  for(let k=2;k>=0;k--) s[k+1][1].forEach((ix,j)=>cube[s[k+1][0]][ix]=cube[s[k][0]][s[k][1][j]]);
+  s[0][1].forEach((ix,j)=>cube[s[0][0]][ix]=tmp[j]);}
+ if(!quiet){hist.push(m);moves++;render();}}
+const INV=m=>m.length>1?m[0]:m+"'";
+function render(){
+ const net=document.getElementById('net');let h='';
+ const pos={U:[0,3],L:[3,0],F:[3,3],R:[3,6],B:[3,9],D:[6,3]};
+ F.forEach(f=>{const[r,c]=pos[f];for(let i=0;i<9;i++){
+  h+='<div class="s" style="grid-row:'+(r+Math.floor(i/3)+1)+';grid-column:'+(c+i%3+1)+';background:'+COL[cube[f][i]]+'"></div>';}});
+ net.innerHTML=h;
+ document.getElementById('sM').textContent=moves;
+ const ss=document.getElementById('sS'),ok=isSolved();
+ ss.textContent=ok?'Solved':'Scrambled';ss.className=ok?'ok':'warn';}
+function isSolved(){return F.every(f=>cube[f].every(v=>v===f));}
+function scramble(){if(busy)return;reset();
+ const seq=[];let last='';
+ for(let i=0;i<18;i++){let f;do{f=F[Math.floor(Math.random()*6)]}while(f===last);last=f;
+  const m=f+(Math.random()<.5?"'":'');seq.push(m);move(m);}
+ document.getElementById('log').textContent='scramble: '+seq.join(' ');
+ document.getElementById('win').textContent='';render();}
+async function solve(){if(busy||!hist.length)return;busy=true;
+ document.getElementById('log').textContent='solving...';
+ while(hist.length){const m=INV(hist.pop());move(m,true);moves++;render();
+  await new Promise(r=>setTimeout(r,120));}
+ document.getElementById('log').textContent='';
+ document.getElementById('win').textContent='Solved &middot; the cube is at peace';busy=false;}
+document.getElementById('mv').innerHTML=F.map(f=>'<button onclick="move(\''+f+'\')"><i style="background:'+COL[f]+'"></i>'+f+'</button><button onclick="move(\''+f+'\\&#39;\')"><i style="background:'+COL[f]+'"></i>'+f+'&prime;</button>').join('');
+document.getElementById('legend').innerHTML=F.map(f=>'<span><i style="background:'+COL[f]+'"></i>'+f+'</span>').join('');
+reset();render();
+</script>
+</body>
+</html>
